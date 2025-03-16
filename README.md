@@ -1,0 +1,1 @@
+Report per il corso di Statistica 2: nella PrimaRelazione viene svolta un'analisi su una tabella dati mediante Regressione; nella SecondaRelazione l'analisi è svolta sulla medesima tabella tramite algoritmi di Clustering; infine nella TerzaRelazione viene presa in considerazione una Serie Storica di cui viene studiato il possibile Trend e altre informazioni.
