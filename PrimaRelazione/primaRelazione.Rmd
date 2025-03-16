@@ -1,0 +1,51 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+#caricamento tabella,eliminazione fattore categorico e fattore ‘fino a 15 minuti’; plot della tabella
+tabellaOriginale=read.csv("C:/Users/HP/OneDrive/Desktop/TabellaPrimaRelazione.csv",header=T)
+tabellaOsservata = tabellaOriginale[,-c(1,13)]
+plot(tabellaOsservata,pch=20)
+#Matrice di correlazione
+corrplot(cor(tabellaOsservata[,-c(1,2)]),"square")
+#Tolgo il fattore studiato, biplot, importanza delle componenti
+tabellaOsservata = tabellaOsservata[,-c(12)]
+tabellaOsservata.pca=princomp(tabellaOsservata,cor=TRUE)
+biplot(tabellaOsservata.pca,choices=c(1,2),col=c("green","red"))
+summary(tabellaOsservata.pca)
+varianza_spiegata = cumsum(tabellaOsservata.pca$sdev^2)/sum(tabellaOsservata.pca$sdev^2)
+plot(varianza_spiegata,type="b",ylim=c(0,1))
+segments(1,0.8,12,0.8,col="red")
+#Matrice dei Loading (senza rotazione)
+tabellaOsservata.loadings=loadings(tabellaOsservata.pca)
+corrplot(tabellaOsservata.loadings,is.corr=F,method="color", addCoef.col = "black",  number.digits=2, number.cex=0.8)
+#Matrice dei Loading (con rotazione)
+tabellaOsservata.rot=varimax(tabellaOsservata.loadings[,1:4])$loadings
+corrplot(tabellaOsservata.rot, is.corr=FALSE,method="color", addCoef.col = "black",  number.digits=2, number.cex=0.8)
+#Plot del fattore studiato in relazione alle componenti principali
+grad<-colorRampPalette(c("blue","red"))
+scol=grad(10)
+x=(X31minuti-min(X31minuti))/(max(X31minuti)-min(X31minuti))
+sidx=1+floor(10*0.99*x)
+prediction=tabellaOsservata.pca$scores[,c(1,2)] #ripetuto anche per c(1,3)
+plot(prediction,pch=19,cex=2,col=scol[sidx],main=ncol)
+
+```
+ 
+ 

@@ -1,0 +1,607 @@
+```{r}
+library(datasets)
+
+serieOriginale=read.csv("C:/Users/HP/OneDrive - University of Pisa/Desktop/tabella.csv",header = TRUE)
+
+class(serieOriginale)
+serieOsservata = ts(serieOriginale[,'cost'])
+
+plot(serieOsservata)
+ts.plot(serieOsservata)
+```
+
+```{r}
+acf(sin(1:100*pi/5)) #esempio puramente stagionale
+acf(nottem)
+acf(serieOsservata,40) #x = ts.serieOriginale['observation_date'])
+```
+
+la normalizzazione non si sente molto, c'è trend ma non vediamo stagionalità da qui
+
+possiamo differenziare la serie: prendiamo delle differenze per vedere se la serie mostra una stagionalità che invece era nascosta
+
+```{r}
+plot(diff(serieOsservata))
+acf(diff(serieOsservata),50)
+```
+
+non c'è stagionalità, allora possiamo usare lo smorzamento esponenziale per cercare di catturare il trend
+
+se notiamo che la serie ha un periodo dal grafico acf, possiamo confermare il periodo tramite il comando frequency(nomeSerie)
+
+possiamo osservare i vari periodi e vedere quanto sono differenti, se al variare dei periodi vediamo figure differenti allora possiamo usare le medie locali sulla stagionalità come decomposizione perché la serie non sarà stazionaria, se invece le figure rimangono uguali allora media globale sulla stagionalità perché serie stazionaria. Questo si può fare col codice che segue
+
+```{r}
+#tante righe quante i mesi, tante colonne quanti gli anni. scuro = passato, chiaro = più presente
+par(bg="black")
+m_ap=matrix(serieOsservata,12,45)
+#ts.plot(m_ap,col=heat.colors(12))
+ts.plot(scale(m_ap,scale=F),col=heat.colors(12))
+lines(rowMeans(scale(m_ap,scale=F)),lwd=3,col="white")
+par(bg="white")
+```
+
+```{r}
+
+serieOsservata=ts(serieOsservata,frequency=12)
+serieOsservata.decomposeAdditiva = decompose(serieOsservata)
+serieOsservata.decomposeMoltiplicativa = decompose(serieOsservata,type = "multiplicative")
+layout(matrix(1:2,1,2))
+plot(serieOsservata.decomposeAdditiva)
+plot(serieOsservata.decomposeMoltiplicativa) #il trend rimane lo stesso perché l'effetto del modello entra in gioco solo dopo la detrendizzazione, stagionalità cambia perché nel moltiplicativo modula il trend
+layout(1)
+```
+
+per i residui si usa il logaritmo
+
+```{r}
+#plot(serieOsservata.decomposeAdditiva$seasonal,col = "white",ylim=c(-9,9))
+#lines((mean(serieOsservata.decomposeMoltiplicativa$trend,na.rm=T))*(serieOsservata.decomposeMoltiplicativa$seasonal-1),col="red")
+
+mediaTrend = mean(serieOsservata.decomposeMoltiplicativa$trend,na.rm = TRUE) 
+plot(serieOsservata.decomposeAdditiva$seasonal,col = "blue",xlim=c(0,7),ylab = "Confronto Stagionalità", ylim = c(-2,1) ,lwd = 2)
+lines(mediaTrend*(serieOsservata.decomposeMoltiplicativa$seasonal-1.05),col="red",lwd = 2)
+
+```
+
+confrontare la varianza dei residui rispetto alla parte di serie che corrisponde ai residui presenti
+
+```{r}
+serieOsservataAdditiva.residui = na.exclude(serieOsservata.decomposeAdditiva$random)
+plot(serieOsservataAdditiva.residui)
+acf(serieOsservataAdditiva.residui)
+```
+
+```{r}
+serieOsservataMoltiplicativa.residui = na.exclude(serieOsservata.decomposeMoltiplicativa$random)
+serieOsservataMoltiplicativa.residui = log(serieOsservataMoltiplicativa.residui)
+plot(serieOsservataMoltiplicativa.residui)
+acf(serieOsservataMoltiplicativa.residui)
+```
+
+per vedere la componente di rumore quanto è rilevante nel problema dobbiamo calcolare la proporzione di varianza non spiegata (varianza dei residui rispetto alla varianza dei dati)
+
+```{r}
+serieOsservata.decomposeMoltiplicativa$random
+var(serieOsservataMoltiplicativa.residui)/var(window(log(serieOsservata),c(1,7),c(46,5))) #se viene bassa il risultato di questa divisione, se è basso la decomposizione cattura molto sennò cattura poco
+```
+
+calcoliamo la funzione di autocorrelazione: la usiamo come indicatore della presenza di struttura, più le correlazioni sono grandi più vuol dire che c'è struttura nel problema. Idealmente dei residui che sonon effettivamente rumore dovrebbero avere valori molto piccoli
+
+```{r}
+sd(acf(serieOsservataAdditiva.residui,plot = F)$acf)
+sd(acf(na.exclude(serieOsservata.decomposeMoltiplicativa$random),plot = F)$acf)
+```
+
+sono simili ma il moltiplicativo è più piccolo, il modello moltiplicativo possiamo pensare che sia più vicino al rumore rispetto alla funzione per il modello additivo, quindi lieve preferenza per il modello moltiplicativo ma non c'è comunque una netta preferenza
+
+CASO STAGIONALITA NON UNIFORME
+
+nota sul trend frastagliato
+
+```{r}
+plot(stl(serieOsservata,7))
+plot(stl(serieOsservata,"periodic"))
+#plot(acf(serieOsservata))
+```
+
+PREVISIONE PER SERIE STORICHE
+
+HOLT-WINTERS 
+
+```{r}
+x=1:20
+coefficients(lm(serieOsservata[1:20]~x))
+#plot(HoltWinters(serieOsservata,l.start=2.849,b.start=0.018))
+
+#in nero la serie,in rosso è l'analisi dello smorzamento esponenziale. L'ottimizzazione cerca alpha che rende minimo lo scarto quadratico medio dei residui
+```
+
+lo smorzamento esponenziale prevede i valori uno dopo l'altro, quinid ha bisogno della serie fino all'istante precedente
+
+```{r}
+
+serieOsservata.hwa = HoltWinters(serieOsservata,alpha=0.7,beta=0.1,gamma=0.3,seasonal = "additive")
+plot(serieOsservata.hwa, lwd = 2)
+
+serieOsservata.hwm = HoltWinters(serieOsservata,alpha=0.3,beta=0.1,gamma=0.1,seasonal = "multiplicative")
+plot(serieOsservata.hwm, lwd = 2)
+```
+
+facciamo variare i parametri e vediamo quel valore del parametro che ci dà l'errore in previsione minore possibile
+
+```{r}
+nt=18 # numero di test set
+ft=1 # unità di tempo nel futuro su cui valutare la previsione
+n=length(serieOsservata) # numero totale di anni
+idt=start(serieOsservata) # data di inizio della serie
+fdt=end(serieOsservata)   # data di fine della serie
+pdt=frequency(serieOsservata) # periodo della serie
+
+err_hw0=0
+err_hw1=0
+err_hw2=0
+for(j in (n-nt-ft):(n-ft-1)){
+  # costruzione di train e test
+  train=window(serieOsservata,idt,ts_data(idt,pdt,j))
+  future=ts_data(idt,pdt,j+ft)
+  test=window(serieOsservata,future,future)
+  # HW standard
+  train.hw0=HoltWinters(train)
+  err_hw0=err_hw0+sum((as.numeric(test)-as.numeric(predict(train.hw0,ft)))^2)
+  # HW parametri personalizzati
+  train.hw1=HoltWinters(train,alpha=0.7, beta=0.1, gamma=0.3, l.start=2.849, b.start=0.018,seasonal = "additive")
+  err_hw1=err_hw1+sum((as.numeric(test)-as.numeric(predict(train.hw1,ft)))^2)
+  train.hw2=HoltWinters(train,alpha=0.3, beta=0.1, gamma=0.1, l.start=2.849, b.start=0.018,seasonal = "multiplicative")
+  err_hw2=err_hw2+sum((as.numeric(test)-as.numeric(predict(train.hw2,ft)))^2)
+}
+err_hw0/nt
+err_hw1/nt
+err_hw2/nt
+```
+in effetti i valori di alpha,beta e gammma scelti da noi garantiscono un errore minore
+
+```{r}
+nt=20 # numero di test set
+ft=1 # unità di tempo nel futuro su cui valutare la previsione
+n=length(serieOsservata) # numero totale di anni
+idt=start(serieOsservata) # data di inizio della serie
+fdt=end(serieOsservata)   # data di fine della serie
+pdt=frequency(serieOsservata) # periodo della serie
+
+err_a=0
+err_m=0
+for(l in (n-nt-ft):(n-1-ft)){
+  # costruzione di train e test
+  train=window(serieOsservata,idt,ts_data(idt,pdt,l))
+  future=ts_data(idt,pdt,l+ft)
+  test=window(serieOsservata,future,future)
+  train.hwa=HoltWinters(train,alpha=0.7,beta=0.1,gamma=0.3,seasonal="additive")
+  train.hwm=HoltWinters(train,alpha=0.3 ,beta=0.1,gamma=0.1,seasonal="multiplicative")
+  err_a = err_a + (as.numeric(test) - as.numeric(predict(train.hwa,ft)))^2
+  err_m = err_m + (as.numeric(test) - as.numeric(predict(train.hwm,ft)))^2
+}
+err_a
+err_m
+```
+
+Dall’esame dei residui e della misura dell’errore in previsione si seleziona il modello moltiplicativo, che si può usare per la previsione, insieme ad una stima non parametrica dell’incertezza (in questo caso al livello 95%).
+
+
+```{r}
+serieOsservata.hwm.p=predict(serieOsservata.hwm,12)
+serieOsservata.hwm.r=resid(serieOsservata.hwm)
+plot(serieOsservata.hwm,lwd=2,xlim = c(1,50),ylim = c(1,15))
+lines(serieOsservata.hwm.p,col="green4")
+#lines(serieOsservata.hwm.p+quantile(serieOsservata.hwm.r,0.025),col="green4",lwd=2)
+#lines(serieOsservata.hwm.p+quantile(serieOsservata.hwm.r,0.975),col="green4",lwd=2)
+# zoom del periodo finale
+wap=window(serieOsservata,start=c(46,7))
+wam=window(serieOsservata.hwm$fitted[,1],start=c(46,7))
+#ts.plot(wap,wam,serieOsservata.hwm.p,lwd=2,ylim=c(1,15),col=c("black","red","blue"))
+#lines(serieOsservata.hwm.p+quantile(serieOsservata.hwm.r,0.025),col="green4",lwd=3)
+#lines(serieOsservata.hwm.p+quantile(serieOsservata.hwm.r,0.975),col="green4",lwd=3)
+```
+
+
+
+
+METODI REGRESSIVI (da capire se è meglio rispetto a Holt-Winters)
+
+```{r}
+acf(nottem)
+pacf(nottem) #esamino fino a quanti lag passati c'è dipendenza al netto delle dipendenze lineari (qui o 7 o 10)
+acf(serieOsservata)
+pacf(serieOsservata)
+```
+
+Autoregressione con un modello implementato direttamente (13 colonne d'ingresso e la quattordicesima di uscita)
+
+Dato il periodo 12, usiamo 13 lag
+
+```{r}
+L = length(serieOsservata)
+l = 13  # numero di lag in ingresso
+mnt = matrix(nrow = L - l, ncol = l + 1)
+for (i in 1:(l + 1)) {
+    mnt[, i] = serieOsservata[i:(L - l - 1 + i)]
+}
+mnt <- data.frame(mnt)
+nt.lm <- lm(X14 ~ ., data = mnt)  # X14 perché 13 lag in ingresso
+summary(nt.lm)
+
+```
+
+Alcune colonne hanno p-value non banale e quindi possiamo pensare di ridurre il modello
+
+```{r}
+copia = mnt[,-c(6,5,11,8)]
+nt.lmr <- lm(X14 ~ X1+X2+X3+X4+X7+X9+X10+X12+X13, data = mnt)  # X14 perché 13 lag in ingresso
+summary(nt.lmr)
+#provando a levare le colonne col p-value più alto in realtà la varianza spiegata rimane praticamente invariata
+nt.lmr <- lm(X14 ~ X2+X13, data = mnt)
+summary(nt.lmr) #sottraendo le colonne col p-value più basso otteniamo un modello ridotto con varianza spiegata ancora buona
+```
+
+Dpbbiamo fare le previsioni a mano
+
+```{r}
+anni = 2 #periodi che vogliamo stimare
+L = length(serieOsservata)
+ptr = rep(0, L + 12 * anni)
+ptr[1:L] = serieOsservata
+for (i in 1:(12 * anni)) {
+    ptr[L + i] = coef(nt.lmr) %*% c(1, ptr[L + i - 12], ptr[L + i - 1])
+}
+#plot(nt.lmr.pt)
+#resid(nt.lmr)
+#frequency((serieOsservata.ts))
+nt.lmr.pt = ts(ptr, frequency = 12, start = c(1, 1))
+nt.lmr.a = window(serieOsservata,c(2,2)) - resid(nt.lmr)
+ts.plot(serieOsservata, nt.lmr.a, window(nt.lmr.pt,c(46, 11)), col = c("black","blue","red"),xlim = c(30,50),lwd = 2)
+```
+
+Proviamo con il modello completo.
+```{r}
+nt.lmc <- lm(X14 ~ ., data = mnt)
+anni = 2
+ptc = rep(0, L + 12 * anni)
+ptc[1:L] = serieOsservata.ts
+for (i in 1:(12 * anni)) {
+    ptc[L + i] = coef(nt.lmc) %*% c(1, rev(ptc[L + i - 1:l]))
+}
+nt.lmc.pt = ts(ptc, frequency = 12, start = c(1, 1))
+nt.lmc.a = window(serieOsservata.ts, c(2, 2)) - resid(nt.lmc)
+ts.plot(serieOsservata.ts, nt.lmc.a, window(nt.lmc.pt, c(46, 12)), col = c("black",
+    "blue", "red"),xlim = c(30,50),lwd = 2)
+```
+
+```{r}
+nt.hw = serieOsservata.hw
+nt.lm.ptc = window(nt.lmc.pt, c(46, 12))
+nt.lm.ptr = window(nt.lmr.pt, c(46, 12))
+nt.hw.pt = predict(serieOsservata.hw, 24)
+ts.plot(serieOsservata, nt.hw.pt, nt.lmc.pt, nt.lmr.pt, col = c("black", "red", "blue",
+    "green4")) #blu = modello regressivo con tutti i fattori, rosso = HW, verde = mod.regr. con X2 e X13
+```
+
+```{r}
+# estrazione dei residui
+nt.hw.r = resid(nt.hw)
+nt.lmc.r = resid(nt.lmc)
+nt.lmr.r = resid(nt.lmr)
+# varianze non spiegate
+var(nt.hw.r)/var(window(serieOsservata, 2))
+var(nt.lmc.r)/var(window(serieOsservata, 2))
+var(nt.lmr.r)/var(window(serieOsservata, 2))
+length(nt.lmc.a)
+length(nt.lmc.r)
+# indicatori di forma
+fm = matrix(c(s2_skewness(nt.hw.r), s2_skewness(nt.lmc.r), s2_skewness(nt.lmr.r),
+    s2_kurtosis(nt.hw.r), s2_kurtosis(nt.lmc.r), s2_kurtosis(nt.lmr.r)),
+    3, 2)
+colnames(fm) <- c("skewness", "kurtosi")
+rownames(fm) <- c("HoltWinters", "autoreg. completo", "autoreg. ridotto")
+fm
+# confronto grafico
+layout(matrix(1:6, 2, 3, byrow = T))
+plot(as.numeric(nt.hw.r), pch = 20, main = "HW", xlab = "tempo", ylab = "residui")
+plot(nt.lmc.r, pch = 20, main = "AR completo", xlab = "tempo", ylab = "residui")
+plot(nt.lmr.r, pch = 20, main = "AR ridotto", xlab = "tempo", ylab = "residui")
+plot(nt.hw$fitted[, 1], nt.hw.r, pch = 20, main = "HW", xlab = "stima", ylab = "residui")
+plot(nt.lmc.a, nt.lmc.r, pch = 20, main = "AR completo", xlab = "stima",
+    ylab = "residui")
+plot(nt.lmr.a, nt.lmc.r, pch = 20, main = "AR ridotto", xlab = "stima", ylab = "residui")
+layout(1)
+# acf e pacf
+layout(matrix(1:6, 2, 3, byrow = T))
+acf(nt.hw.r, 28)
+acf(nt.lmc.r, 28)
+acf(nt.lmr.r, 28)
+pacf(nt.hw.r, 28)
+pacf(nt.lmc.r, 28)
+pacf(nt.lmr.r, 28)
+layout(1)
+# frequenze
+layout(t(1:3))
+hist(nt.hw.r, 20, freq = F, main = "HW")
+lines(density(nt.hw.r), col = "blue")
+lines(sort(nt.hw.r), dnorm(sort(nt.hw.r), mean(nt.hw.r), sd(nt.hw.r)), col = "red")
+hist(nt.lmc.r, 20, freq = F, main = "AR completo")
+lines(density(nt.lmc.r), col = "blue")
+lines(sort(nt.lmc.r), dnorm(sort(nt.lmc.r), mean(nt.lmc.r), sd(nt.lmc.r)),
+    col = "red")
+hist(nt.lmr.r, 20, freq = F, main = "AR ridotto")
+lines(density(nt.lmr.r), col = "blue")
+lines(sort(nt.lmr.r), dnorm(sort(nt.lmr.r), mean(nt.lmr.r), sd(nt.lmr.r)),
+    col = "red")
+layout(1)
+# quantili
+layout(t(1:3))
+qqnorm(nt.hw.r, pch = 20,main = "HW")
+qqline(nt.hw.r)
+qqnorm(nt.lmc.r, pch = 20,main = "AR Completo")
+qqline(nt.lmc.r)
+qqnorm(nt.lmr.r, pch = 20,main = "AR ridotto")
+qqline(nt.lmr.r)
+layout(1)
+# test
+shapiro.test(nt.hw.r)
+shapiro.test(nt.lmc.r)
+shapiro.test(nt.lmr.r)
+layout(1)
+
+```
+
+
+```{r}
+nt = 20  # numero di test set
+ft = 1  # unità di tempo nel futuro su cui valutare la previsione
+n = length(serieOsservata)  # numero totale di anni
+idt = start(serieOsservata)  # data di inizio della serie
+fdt = end(serieOsservata)  # data di fine della serie
+pdt = frequency(serieOsservata)  # periodo della serie
+
+err_hw = rep(0, nt)
+err_lmc = rep(0, nt)
+err_lmr = rep(0, nt)
+for (j in (n - nt - ft):(n - ft - 1)) {
+    # training e test set
+    train = window(serieOsservata, idt, ts_data(idt, pdt, j))
+    future = ts_data(idt, pdt, j + ft)
+    test = window(serieOsservata, future, future)
+    # HW
+    train.hw = HoltWinters(train)
+    err_hw[j - (n - nt - ft) + 1] = as.numeric(test) - predict(train.hw,
+        ft)[ft]
+    # AR
+    L = length(train)
+    l = 13  # numero di lag in ingresso
+    mtrain = matrix(nrow = L - l, ncol = l + 1)
+    for (i in 1:(l + 1)) {
+        mtrain[, i] = train[i:(L - l - 1 + i)]
+    }
+    mtrain <- data.frame(mtrain)
+    # AR completo
+    train.lmc <- lm(X14 ~ ., data = mtrain)
+    train.lmc.p = rep(0, L + ft)
+    train.lmc.p[1:L] = train
+    for (i in 1:ft) {
+        train.lmc.p[L + i] = coef(train.lmc) %*% c(1, rev(train.lmc.p[L +
+            i - 1:l]))
+    }
+    err_lmc[j - (n - nt - ft) + 1] = as.numeric(test) - train.lmc.p[L + ft]
+    # AR ridotto
+    train.lmr <- lm(X14 ~ X3 + X13, data = mtrain)
+    train.lmr.p = rep(0, L + ft)
+    train.lmr.p[1:L] = train
+    for (i in 1:ft) {
+        train.lmr.p[L + i] = coef(train.lmr) %*% c(1, train.lmr.p[L + i -
+            11], train.lmr.p[L + i - 1])
+    }
+    err_lmr[j - (n - nt - ft) + 1] = as.numeric(test) - train.lmr.p[L + ft]
+}
+sum(err_hw^2)/nt
+sum(err_lmc^2)/nt
+sum(err_lmr^2)/nt
+```
+
+Autoregressione con il metodo Yule-Walker
+
+```{r}
+serieOsservata.ar = ar(serieOsservata)
+serieOsservata.ar
+```
+
+```{r}
+ts.plot(serieOsservata, serieOsservata - serieOsservata.ar$resid, col = c("black", "red")) #nero = serie originale, rosso = stime
+```
+
+il grafico sopra sbaglia abbastanza
+
+
+ora Otteniamo una predizione con il modello regressivo.
+```{r}
+r = na.omit(serieOsservata.ar$resid)
+serieOsservata.ar.pt = predict(serieOsservata.ar, n.ahead = 12, se.fit = TRUE, level = 0.95)
+serieOsservata.ar.a = window(serieOsservata, start = c(1,7)) - r
+ts.plot(serieOsservata.ar.a, serieOsservata.ar.pt$pred, col = c("black", "red"), xlim = c(30,50), lwd = 2)
+```
+
+In vista della stima delle incertezze nella previsione, esaminiamo i residui del modello
+
+```{r}
+var(r)/var(window(serieOsservata, start = c(1, 1)))
+s2_skewness(r)
+s2_kurtosis(r)
+layout(matrix(1:6, 2, 3, byrow = T))
+plot(as.numeric(serieOsservata.ar$resid), pch = 20)
+plot(serieOsservata.ar.a, serieOsservata.ar$resid, pch = 20)
+acf(r, 28)
+pacf(r, 28)
+hist(serieOsservata.ar$resid, 20, freq = F)
+lines(density(r), col = "blue")
+lines(sort(r), dnorm(sort(r), mean(r), sd(r)), col = "red")
+qqnorm(serieOsservata.ar$resid, pch = 20)
+qqline(serieOsservata.ar$resid)
+layout(1)
+shapiro.test(serieOsservata.ar$resid)
+```
+
+Valutiamo l’incertezza (non parametrica) nella previsione.
+```{r}
+up = serieOsservata.ar.pt$pred + quantile(r, 0.975)
+lw = serieOsservata.ar.pt$pred + quantile(r, 0.025)
+ts.plot(serieOsservata.ar.a, serieOsservata.ar.pt$pred, col = c("black", "red"), lwd = 1)
+lines(up, col = "blue", lwd = 1)
+lines(lw, col = "blue", lwd = 1)
+```
+
+ricaviamo quindi la stima dell’incertezza per via parametrica
+```{r}
+ts.plot(serieOsservata.ar.a, serieOsservata.ar.pt$pred, col = c("black", "red"), xlim = c(30,50), ylim = c(2,10), lwd = 2)
+# non parametrico
+lines(up, col = "blue", lwd = 2)
+lines(lw, col = "blue", lwd = 2)
+# parametrico
+lines(serieOsservata.ar.pt$pred - serieOsservata.ar.pt$se, col = "green4", lwd = 2)
+lines(serieOsservata.ar.pt$pred + serieOsservata.ar.pt$se, col = "green4", lwd = 2)
+```
+Confronto con Holt-Winters
+
+```{r}
+serieOsservata.hw = HoltWinters(serieOsservata, alpha = 0.34, beta = 0.3, gamma = 0.5)
+serieOsservata.hw.pt = predict(serieOsservata.hw, 12)
+ts.plot(serieOsservata.ar.a, serieOsservata.hw.pt, serieOsservata.ar.pt$pred, col = c("black", "red", "blue"),xlim = c(30,50), ylim = c(2,10),lwd = 2)
+```
+
+Valutiamo infine l’errore in previsione di entrambi i modelli.
+```{r}
+nt = 18  # numero di test set
+ft = 1  # unità di tempo nel futuro su cui valutare la previsione
+n = length(serieOsservata)  # numero totale di anni
+idt = start(serieOsservata)  # data di inizio della serie
+fdt = end(serieOsservata)  # data di fine della serie
+pdt = frequency(serieOsservata)  # periodo della seri
+err_ar = rep(0, nt)
+err_hw = rep(0, nt)
+for (l in (n - nt - ft):(n - 1 - ft)) {
+    # costruzione di train e test
+    train = window(serieOsservata, idt, ts_data(idt, pdt, l))
+    future = ts_data(idt, pdt, l + ft)
+    test = window(serieOsservata, future, future)
+    # HW
+    train.hw = HoltWinters(train, alpha = 0.34, beta = 0.3, gamma = 0.5)
+    err_hw[l - (n - nt - ft) + 1] = as.numeric(test) - as.numeric(predict(train.hw,
+        ft)[ft])
+    # AR
+    train.ar = ar(train, order.max = 14)
+    err_ar[l - (n - nt - ft) + 1] = as.numeric(test) - as.numeric(predict(train.ar,
+        n.ahead = ft, se.fit = F)[ft])
+}
+sum(err_hw^2)/nt
+sum(err_ar^2)/nt
+plot(err_ar)
+plot(err_hw)
+```
+
+MINIMI QUADRATI
+```{r}
+serieOsservata.ls = ar(serieOsservata, method = "ols")
+serieOsservata.ls$order
+ts.plot(serieOsservata, serieOsservata - serieOsservata.ls$resid, col = c("black", "blue"))
+```
+
+Esaminiamo i residui
+```{r}
+serieOsservata.ls.r = as.double(na.omit(serieOsservata.ls$resid))
+serieOsservata.ls.a = as.double(na.omit(serieOsservata - serieOsservata.ls$resid))
+var(serieOsservata.ls.r)/var(window(serieOsservata, start = c(1, 1)))
+s2_skewness(serieOsservata.ls.r)
+s2_kurtosis(serieOsservata.ls.r)
+layout(matrix(1:6, 2, 3, byrow = T))
+
+plot(serieOsservata.ls.r, pch = 20)
+plot(serieOsservata.ls.a, serieOsservata.ls.r, pch = 20)
+acf(serieOsservata.ls.r, 28)
+pacf(serieOsservata.ls.r, 28)
+hist(serieOsservata.ls.r, 20, freq = F)
+lines(density(serieOsservata.ls.r), col = "blue")
+lines(sort(serieOsservata.ls.r), dnorm(sort(serieOsservata.ls.r), mean(serieOsservata.ls.r), sd(serieOsservata.ls.r)), col = "red")
+qqnorm(serieOsservata.ls.r, pch = 20)
+qqline(serieOsservata.ls.r)
+layout(1)
+shapiro.test(serieOsservata.ls.r)
+```
+
+
+
+```{r}
+serieOsservata.ls.pt = predict(serieOsservata.ls, n.ahead = 12, se.fit = TRUE, level = 0.95)
+y.max = max(serieOsservata.ls.pt$pred + quantile(serieOsservata.ls.r, 0.975))
+y.min = min(window(serieOsservata - serieOsservata.ls$resid, 46))
+ts.plot(window(serieOsservata, 46), window(serieOsservata - serieOsservata.ls$resid, 46), serieOsservata.ls.pt$pred,
+    col = c("black", "blue", "red"), lwd = 2, ylim = c(y.min, y.max))
+# stima empirica dell'incertezza lines(ap.ls.pt$pred +
+# quantile(ap.ls.r, 0.975), col = 'green4') lines(ap.ls.pt$pred +
+# quantile(ap.ls.r, 0.025), col = 'green4') stima parametrica
+# dell'incertezza
+lines(serieOsservata.ls.pt$pred - serieOsservata.ls.pt$se, col = "blue")
+lines(serieOsservata.ls.pt$pred + serieOsservata.ls.pt$se, col = "blue")
+```
+
+
+
+
+
+Confrontiamo il modello appena analizzato con Holt-Winters.
+```{r}
+# analisi
+serieOsservata.hw = HoltWinters(serieOsservata, seasonal = "m")
+ts.plot(serieOsservata, serieOsservata - serieOsservata.ls$resid, serieOsservata.hw$fitted[, 1], col = c("black", "red",
+    "blue"), xlim = c(30,50), ylim = c(2,10),lwd = 2)
+# previsioni
+serieOsservata.hw.pt = predict(serieOsservata.hw, 12)
+ts.plot(serieOsservata, serieOsservata.ls.pt$pred, serieOsservata.hw.pt, col = c("black", "red","blue"), xlim = c(30,50), ylim = c(2,10),lwd = 2)
+lines(serieOsservata.ls.pt$pred - serieOsservata.ls.pt$se, col = "green4", lwd = 2)
+lines(serieOsservata.ls.pt$pred + serieOsservata.ls.pt$se, col = "green4", lwd = 2)
+```
+
+Confrontiamo i due metodi con l’autovalutazione.
+```{r}
+nt = 20  # numero di test set
+ft = 1  # unità di tempo nel futuro su cui valutare la previsione
+n = length(serieOsservata)  # numero totale di anni
+idt = start(serieOsservata)  # data di inizio della serie
+fdt = end(serieOsservata)  # data di fine della serie
+pdt = frequency(serieOsservata)  # periodo della seri
+err_ls = rep(0, nt)
+err_hw = rep(0, nt)
+for (l in (n - nt - ft):(n - 1 - ft)) {
+    # costruzione di train e test
+    train = window(serieOsservata, idt, ts_data(idt, pdt, l))
+    future = ts_data(idt, pdt, l + ft)
+    test = window(serieOsservata, future, future)
+    # HW
+    train.hw = HoltWinters(train, alpha = 0.1, beta = 0.92, gamma = 0.36,
+        seasonal = "multiplicative")
+    err_hw[l - (n - nt - ft) + 1] = as.numeric(test) - as.numeric(predict(train.hw,
+        ft)[ft])
+    # AR
+    train.ls = ar(train, order.max = 21, method = "ols")
+    err_ls[l - (n - nt - ft) + 1] = as.numeric(test) - as.numeric(predict(train.ls,
+        n.ahead = ft, se.fit = F)[ft])
+}
+sum(err_hw^2)/nt
+sum(err_ls^2)/nt
+
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
